@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { scryfallAPI } from '../services/scryfallAPI';
 import { mtgjsonService } from '../services/mtgjsonService';
-import { cardSynergyService } from '../services/cardSynergyService';
+import { graphSynergyService, type GraphSynergyCard } from '../services/graphSynergyService';
 import { commanderRulesService } from '../services/commanderRulesService';
 import { extractKeywords, getCommanderRelevantKeywords } from '../data/magicKeywords';
 import { useCustomDeck } from '../contexts/CustomDeckContext';
@@ -9,7 +9,6 @@ import { CustomDeckView } from './CustomDeckView';
 import type { PreconDeckSearchResult } from '../types/mtgjson';
 import type { ScryfallCard } from '../types/scryfall';
 import type { MTGJSONDeck, MTGJSONCard } from '../types/mtgjson';
-import type { SynergyCard } from '../services/cardSynergyService';
 
 interface DeckDisplayProps {
   selectedDecks: PreconDeckSearchResult[];
@@ -25,12 +24,13 @@ interface DeckData {
 interface SynergyState {
   isActive: boolean;
   selectedCommander?: ScryfallCard;
+  commanderDeck?: string;
   selectedDecks: string[];
-  suggestions: SynergyCard[];
+  suggestions: GraphSynergyCard[];
   loading: boolean;
 }
 
-export const DeckDisplay: React.FC<DeckDisplayProps> = ({ selectedDecks, onClose }) => {
+export const DeckDisplay: React.FC<DeckDisplayProps> = ({ selectedDecks }) => {
   const [deckData, setDeckData] = useState<Map<string, DeckData>>(new Map());
   const [selectedCard, setSelectedCard] = useState<ScryfallCard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -143,76 +143,164 @@ export const DeckDisplay: React.FC<DeckDisplayProps> = ({ selectedDecks, onClose
   };
 
   const handleCommanderClick = (commanderName: string, deckName: string) => {
+    console.log('👑 handleCommanderClick called');
+    console.log('Commander name:', commanderName);
+    console.log('Deck name:', deckName);
+    
     const deckInfo = deckData.get(deckName);
+    console.log('Deck info found:', !!deckInfo);
+    
     const commander = deckInfo?.commanderCards.get(commanderName);
+    console.log('Commander card found:', !!commander);
+    console.log('Commander details:', commander?.name, commander?.type_line);
+    
     if (commander) {
       setSelectedCard(commander);
+      console.log('✅ Selected card set to commander');
+      
       // Reset synergy state when selecting a new commander
       setSynergyState({
         isActive: false,
         selectedCommander: commander,
+        commanderDeck: deckName,
         selectedDecks: [],
         suggestions: [],
         loading: false
       });
+      
+      console.log('✅ Synergy state reset with new commander');
+    } else {
+      console.log('❌ Commander not found in deck data');
     }
   };
 
   const handleStartSynergy = () => {
-    if (!selectedCard || !synergyState.selectedCommander) return;
+    console.log('🚀 handleStartSynergy called');
+    console.log('Selected card:', selectedCard?.name);
+    console.log('Selected commander in synergy state:', synergyState.selectedCommander?.name);
+    
+    if (!selectedCard || !synergyState.selectedCommander) {
+      console.log('❌ Early return: Missing selected card or commander');
+      return;
+    }
+    
+    console.log('✅ Starting synergy mode...');
+    console.log('Available decks:', selectedDecks.map(d => d.name));
     
     setSynergyState(prev => ({
       ...prev,
       isActive: true,
       selectedDecks: selectedDecks.map(d => d.name) // Default to all decks
     }));
+    
+    console.log('Synergy state activated with decks:', selectedDecks.map(d => d.name));
   };
 
   const handleSynergyDeckToggle = (deckName: string) => {
-    setSynergyState(prev => ({
-      ...prev,
-      selectedDecks: prev.selectedDecks.includes(deckName)
+    console.log('🔄 handleSynergyDeckToggle called for deck:', deckName);
+    
+    setSynergyState(prev => {
+      const newSelectedDecks = prev.selectedDecks.includes(deckName)
         ? prev.selectedDecks.filter(d => d !== deckName)
-        : [...prev.selectedDecks, deckName]
-    }));
+        : [...prev.selectedDecks, deckName];
+      
+      console.log('Updated selected decks:', newSelectedDecks);
+      
+      return {
+        ...prev,
+        selectedDecks: newSelectedDecks
+      };
+    });
   };
 
   const handleFindSynergyCards = async () => {
-    if (!synergyState.selectedCommander || synergyState.selectedDecks.length === 0) return;
+    console.log('🔍 handleFindSynergyCards called');
+    console.log('Selected commander:', synergyState.selectedCommander?.name);
+    console.log('Selected decks:', synergyState.selectedDecks);
+    
+    if (!synergyState.selectedCommander || synergyState.selectedDecks.length === 0) {
+      console.log('❌ Early return: Missing commander or no decks selected');
+      return;
+    }
 
+    console.log('✅ Starting synergy analysis...');
     setSynergyState(prev => ({ ...prev, loading: true }));
 
     try {
+      // Always include the commander's deck + selected decks for graph building
+      const decksToInclude = new Set([
+        ...(synergyState.commanderDeck ? [synergyState.commanderDeck] : []),
+        ...synergyState.selectedDecks
+      ]);
+      
       const availableDecks = Array.from(deckData.values())
         .map(data => data.deck)
-        .filter(deck => synergyState.selectedDecks.includes(deck.name));
+        .filter(deck => decksToInclude.has(deck.name));
+
+      console.log('Available decks for analysis:', availableDecks.map(d => d.name));
+      console.log('Commander deck:', synergyState.commanderDeck);
+      console.log('Selected decks for synergy search:', synergyState.selectedDecks);
 
       const allDeckCards = new Map<string, Map<string, ScryfallCard>>();
-      for (const deckName of synergyState.selectedDecks) {
+      for (const deckName of Array.from(decksToInclude)) {
+        console.log(`📥 Loading cards for deck: ${deckName}`);
         const deckInfo = deckData.get(deckName);
         if (deckInfo) {
-          // Load all cards for synergy analysis
+          // Load all mainboard cards for synergy analysis
           const cardNames = deckInfo.deck.mainBoard.map(c => c.name);
+          console.log(`Found ${cardNames.length} mainboard cards in ${deckName}`);
+          
           const cardData = await scryfallAPI.getCardsByNames(cardNames);
+          console.log(`Loaded ${cardData.size} Scryfall mainboard cards for ${deckName}`);
+          
+          // Also add commander cards that we already have loaded
+          deckInfo.commanderCards.forEach((commanderCard, commanderName) => {
+            cardData.set(commanderName, commanderCard);
+            console.log(`✅ Added commander to card data: ${commanderName}`);
+          });
+          
           allDeckCards.set(deckName, cardData);
+          console.log(`Total cards for ${deckName}: ${cardData.size}`);
         }
       }
 
-      const suggestions = cardSynergyService.findSynergisticCards(
+      console.log('🏗️ Building synergy graph...');
+      // Build the synergy graph with all available data
+      graphSynergyService.buildGraph(availableDecks, allDeckCards);
+
+      console.log('🔎 Getting recommendations...');
+      // Get Level 1 and Level 2 recommendations
+      const recommendations = graphSynergyService.getRecommendations(
         synergyState.selectedCommander,
-        availableDecks,
-        allDeckCards,
-        customDeck // Pass custom deck for compatibility filtering
+        synergyState.selectedDecks,
+        customDeck
       );
+
+      console.log('Level 1 recommendations:', recommendations.level1.length);
+      console.log('Level 2 recommendations:', recommendations.level2.length);
+
+      // Combine Level 1 and Level 2 suggestions into a single array
+      // Level 1 suggestions get priority (higher scores)
+      const allSuggestions = [
+        ...recommendations.level1,
+        ...recommendations.level2
+      ].sort((a, b) => b.synergyScore - a.synergyScore);
+
+      console.log('🎯 Total combined suggestions:', allSuggestions.length);
+      console.log('Top 5 suggestions:', allSuggestions.slice(0, 5).map(s => `${s.card.name} (${s.synergyScore})`));
 
       setSynergyState(prev => ({
         ...prev,
-        suggestions,
+        suggestions: allSuggestions,
         loading: false
       }));
     } catch (error) {
-      console.error('Error finding synergy cards:', error);
-      setSynergyState(prev => ({ ...prev, loading: false }));
+      console.error('💥 Error finding synergy cards:', error);
+      setSynergyState(prev => ({ 
+        ...prev, 
+        loading: false, 
+        suggestions: []
+      }));
     }
   };
 
@@ -541,7 +629,7 @@ export const DeckDisplay: React.FC<DeckDisplayProps> = ({ selectedDecks, onClose
                       onClick={handleStartSynergy}
                       className="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 text-white rounded text-xs"
                     >
-                      Find Synergies
+                      Start Synergy Analysis
                     </button>
                   ) : (
                     <button
@@ -585,29 +673,58 @@ export const DeckDisplay: React.FC<DeckDisplayProps> = ({ selectedDecks, onClose
 
                     {/* Synergy Results */}
                     {synergyState.suggestions.length > 0 && (
-                      <div className="max-h-64 overflow-y-auto">
-                        <p className="text-xs text-yellow-400 mb-2">
-                          {synergyState.suggestions.length} synergistic cards found:
+                      <div className="max-h-80 overflow-y-auto">
+                        <p className="text-sm font-medium text-yellow-400 mb-2">
+                          Synergistic Cards ({synergyState.suggestions.length})
+                        </p>
+                        <p className="text-xs text-gray-400 mb-3">
+                          Cards that work well with your commander:
                         </p>
                         <div className="space-y-2">
-                          {synergyState.suggestions.slice(0, 10).map((suggestion, index) => (
-                            <div key={index} className="bg-gray-700 rounded p-2">
-                              <button
-                                onClick={() => {
-                                  setSelectedCard(suggestion.card);
-                                }}
-                                className="text-left w-full hover:bg-gray-600 rounded p-1 transition-colors"
-                              >
-                                <p className="text-xs font-medium text-white">
-                                  {suggestion.card.name}
-                                </p>
-                                <p className="text-xs text-gray-400">
-                                  From: {suggestion.sourceDeck}
-                                </p>
-                                <p className="text-xs text-yellow-300">
-                                  {suggestion.synergyReasons.join(', ')}
-                                </p>
-                              </button>
+                          {synergyState.suggestions.slice(0, 15).map((suggestion, index) => (
+                            <div key={`synergy-${index}`} className="bg-gray-700 rounded p-2">
+                              <div className="flex items-center gap-2">
+                                {/* Small card image - click to view card */}
+                                {suggestion.card.image_uris?.normal && (
+                                  <button
+                                    onClick={() => setSelectedCard(suggestion.card)}
+                                    className="flex-shrink-0 hover:scale-105 transition-transform"
+                                    title="Click to view card"
+                                  >
+                                    <img
+                                      src={suggestion.card.image_uris.normal}
+                                      alt={suggestion.card.name}
+                                      className="w-12 h-16 object-cover rounded border border-gray-500 hover:border-yellow-400"
+                                    />
+                                  </button>
+                                )}
+                                
+                                {/* Card info */}
+                                <div className="flex-1">
+                                  <button
+                                    onClick={() => {
+                                      setSelectedCard(suggestion.card);
+                                    }}
+                                    className="text-left w-full hover:bg-gray-600 rounded p-1 transition-colors"
+                                  >
+                                    <p className="text-xs font-medium text-white">
+                                      {suggestion.card.name}
+                                    </p>
+                                    <p className="text-xs text-gray-400">
+                                      From: {suggestion.sourceDeck}
+                                    </p>
+                                    {/* Commented out synergy explanation per user request */}
+                                    {/* <p className="text-xs text-yellow-300">
+                                      {suggestion.synergyReasons.join(', ')}
+                                    </p> */}
+                                    {suggestion.chainedThrough && (
+                                      <p className="text-xs text-purple-300 mt-1">
+                                        → Works with: {suggestion.chainedThrough}
+                                      </p>
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
                               <div className="mt-1 flex gap-1">
                                 <button
                                   onClick={() => handleAddToCustomDeck(suggestion.card, false)}

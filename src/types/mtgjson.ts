@@ -31,7 +31,7 @@ export interface MTGJSONDeck {
   code: string;
   type: string;
   releaseDate: string;
-  commander?: MTGJSONCommanderRef[];
+  commander?: MTGJSONCard[]; // Changed from MTGJSONCommanderRef[] to MTGJSONCard[]
   mainBoard: MTGJSONCard[];
   sideBoard?: MTGJSONCard[];
 }
