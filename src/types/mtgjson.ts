@@ -20,12 +20,18 @@ export interface MTGJSONCard {
   count?: number;
 }
 
+export interface MTGJSONCommanderRef {
+  count: number;
+  isFoil: boolean;
+  uuid: string;
+}
+
 export interface MTGJSONDeck {
   name: string;
   code: string;
   type: string;
   releaseDate: string;
-  commander?: MTGJSONCard[];
+  commander?: MTGJSONCommanderRef[];
   mainBoard: MTGJSONCard[];
   sideBoard?: MTGJSONCard[];
 }
@@ -36,6 +42,7 @@ export interface MTGJSONSet {
   type: string;
   releaseDate: string;
   decks?: MTGJSONDeck[];
+  cards?: MTGJSONCard[];
 }
 
 export interface PreconDeckSearchResult {

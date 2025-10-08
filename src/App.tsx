@@ -1,13 +1,22 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DeckSearch } from './components/DeckSearch';
 import { SelectedDecks } from './components/SelectedDecks';
 import { DeckDisplay } from './components/DeckDisplay';
 import { CustomDeckProvider } from './contexts/CustomDeckContext';
+import { storageService } from './services/storageService'; // PHASE 2: Search history
 import type { PreconDeckSearchResult } from './types/mtgjson';
+import './styles/effects.css'; // PHASE 2: Visual effects
 
 function App() {
   const [selectedDecks, setSelectedDecks] = useState<PreconDeckSearchResult[]>([]);
   const [showDeckAnalysis, setShowDeckAnalysis] = useState(false);
+  const [searchHistory, setSearchHistory] = useState<PreconDeckSearchResult[]>([]); // PHASE 2: Search history
+
+  // PHASE 2: Load search history on component mount
+  useEffect(() => {
+    const history = storageService.loadSearchHistory();
+    setSearchHistory(history);
+  }, []);
 
   const handleDeckSelect = (deck: PreconDeckSearchResult) => {
     // Prevent duplicate selections
@@ -22,6 +31,12 @@ function App() {
 
   const handleAnalyzeDecks = () => {
     if (selectedDecks.length === 0) return;
+    
+    // PHASE 2: Save analyzed decks to search history
+    storageService.addToSearchHistory(selectedDecks);
+    const updatedHistory = storageService.loadSearchHistory();
+    setSearchHistory(updatedHistory);
+    
     setShowDeckAnalysis(true);
   };
 
@@ -49,6 +64,7 @@ function App() {
               <DeckSearch 
                 onDeckSelect={handleDeckSelect}
                 selectedDecks={selectedDecks}
+                searchHistory={searchHistory}
               />
               <p className="text-sm text-gray-400 mt-2">
                 Try searching for "Caesar", "Scrappy", "Death", or any deck theme

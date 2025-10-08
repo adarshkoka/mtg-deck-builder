@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import type { CustomDeck, ValidationError } from '../types/customDeck';
 import type { ScryfallCard } from '../types/scryfall';
 import { commanderRulesService } from '../services/commanderRulesService';
+import { storageService } from '../services/storageService'; // PHASE 2: Persistent storage
 
 interface CustomDeckContextType {
   customDeck: CustomDeck;
@@ -30,11 +31,20 @@ interface CustomDeckProviderProps {
 }
 
 export const CustomDeckProvider: React.FC<CustomDeckProviderProps> = ({ children }) => {
-  const [customDeck, setCustomDeck] = useState<CustomDeck>({
-    name: 'My Custom Deck',
-    cards: [],
-    colorIdentity: []
+  // PHASE 2: Load saved deck from localStorage on initialization
+  const [customDeck, setCustomDeck] = useState<CustomDeck>(() => {
+    const savedDeck = storageService.loadCustomDeck();
+    return savedDeck || {
+      name: 'My Custom Deck',
+      cards: [],
+      colorIdentity: []
+    };
   });
+
+  // PHASE 2: Auto-save deck changes to localStorage
+  useEffect(() => {
+    storageService.saveCustomDeck(customDeck);
+  }, [customDeck]);
 
   const addCard = (card: ScryfallCard, sourceDeck?: string, asCommander: boolean = false): ValidationError[] => {
     // Validate the addition first
@@ -160,11 +170,14 @@ export const CustomDeckProvider: React.FC<CustomDeckProviderProps> = ({ children
   };
 
   const clearDeck = () => {
-    setCustomDeck({
+    const emptyDeck = {
       name: 'My Custom Deck',
       cards: [],
       colorIdentity: []
-    });
+    };
+    setCustomDeck(emptyDeck);
+    // PHASE 2: Clear from storage as well
+    storageService.clearCustomDeck();
   };
 
   const validateDeck = () => {

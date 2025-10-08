@@ -1,6 +1,11 @@
 import axios from 'axios';
 import type { MTGJSONSet, MTGJSONDeck, PreconDeckSearchResult, MTGJSONCard } from '../types/mtgjson';
 
+// Extended deck type with resolved commander names
+interface ExtendedMTGJSONDeck extends MTGJSONDeck {
+  resolvedCommanders?: string[];
+}
+
 class MTGJSONService {
   private readonly baseURL = 'https://mtgjson.com/api/v5';
   private deckCache = new Map<string, MTGJSONDeck>();
@@ -14,11 +19,17 @@ class MTGJSONService {
    * Search for precon decks by name using MTGJSON API across all sets
    */
   async searchDecks(query: string): Promise<PreconDeckSearchResult[]> {
-    if (!query.trim()) return [];
+    console.log('SearchDecks called with query:', query);
+    
+    if (!query.trim()) {
+      console.log('Empty query, returning empty array');
+      return [];
+    }
     
     // Check cache first
     const cacheKey = query.toLowerCase();
     if (this.searchCache.has(cacheKey)) {
+      console.log('Found cached results for:', query);
       return this.searchCache.get(cacheKey)!;
     }
 
@@ -99,24 +110,73 @@ class MTGJSONService {
         (deck.commander && deck.commander.length > 0)
       );
 
-      // If query provided, filter by name
+      console.log(`${setCode}: Found ${filteredDecks.length} commander decks`);
+
+      // Transform decks to include commander names resolved from UUIDs
+      const transformedDecks: ExtendedMTGJSONDeck[] = filteredDecks.map(deck => {
+        const commanderNames: string[] = [];
+        
+        if (deck.commander && setData.cards) {
+          for (const commanderRef of deck.commander) {
+            const commanderCard = setData.cards.find((card: any) => card.uuid === commanderRef.uuid);
+            if (commanderCard) {
+              commanderNames.push(commanderCard.name);
+            }
+          }
+        }
+
+        return {
+          ...deck,
+          resolvedCommanders: commanderNames
+        } as ExtendedMTGJSONDeck;
+      });
+
+      // If query provided, filter by name or commander names
       if (query) {
         const queryLower = query.toLowerCase();
-        filteredDecks = filteredDecks.filter(deck => 
-          deck.name.toLowerCase().includes(queryLower)
-        );
+        console.log(`Filtering decks in ${setCode} by query: "${queryLower}"`);
+        
+        const queryFilteredDecks = transformedDecks.filter(deck => {
+          // Search by deck name
+          const nameMatch = deck.name.toLowerCase().includes(queryLower);
+          
+          // Search by commander names (now using resolved names)
+          const commanderMatch = deck.resolvedCommanders?.some(commanderName => {
+            const commanderNameLower = commanderName.toLowerCase();
+            // Direct match
+            if (commanderNameLower.includes(queryLower)) {
+              return true;
+            }
+            // Word-based matching
+            const commanderWords = commanderNameLower.split(/[\s,]+/);
+            return commanderWords.some(word => word.includes(queryLower));
+          }) || false;
+          
+          const matches = nameMatch || commanderMatch;
+          if (matches) {
+            console.log(`Match found in ${setCode}: ${deck.name} - ${deck.resolvedCommanders?.join(', ')}`);
+          }
+          return matches;
+        });
+        
+        filteredDecks = queryFilteredDecks;
+      } else {
+        filteredDecks = transformedDecks;
       }
 
       console.log(`Found ${filteredDecks.length} matching decks in ${setCode}:`, filteredDecks.map(d => d.name));
 
-      return filteredDecks.map(deck => ({
-        name: deck.name,
-        code: deck.code,
-        commanders: deck.commander?.map(c => c.name) || [],
-        primaryCommander: deck.commander?.[0]?.name || '',
-        theme: this.inferTheme(deck.name),
-        releaseDate: deck.releaseDate || setData.releaseDate
-      }));
+      return filteredDecks.map(deck => {
+        const extendedDeck = deck as ExtendedMTGJSONDeck;
+        return {
+          name: extendedDeck.name,
+          code: extendedDeck.code,
+          commanders: extendedDeck.resolvedCommanders || [],
+          primaryCommander: extendedDeck.resolvedCommanders?.[0] || '',
+          theme: this.inferTheme(extendedDeck.name),
+          releaseDate: extendedDeck.releaseDate || setData.releaseDate
+        };
+      });
     } catch (error) {
       console.warn(`Failed to fetch set ${setCode}:`, error);
       return [];
@@ -274,7 +334,7 @@ class MTGJSONService {
       code: deck.code,
       type: deck.type || 'Commander Deck',
       releaseDate: deck.releaseDate,
-      commander: allCommanders.map((card: any) => this.transformCard(card)),
+      commander: allCommanders.map((card: any) => this.transformCard(card)) as any,
       mainBoard: mainBoardWithoutCommanders.map((card: any) => this.transformCard(card)),
       sideBoard: sideBoardCards.map((card: any) => this.transformCard(card))
     };

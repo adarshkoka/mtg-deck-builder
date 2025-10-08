@@ -5,9 +5,10 @@ import type { PreconDeckSearchResult } from '../types/mtgjson';
 interface DeckSearchProps {
   onDeckSelect: (deck: PreconDeckSearchResult) => void;
   selectedDecks: PreconDeckSearchResult[];
+  searchHistory?: PreconDeckSearchResult[]; // PHASE 2: Search history
 }
 
-export const DeckSearch: React.FC<DeckSearchProps> = ({ onDeckSelect, selectedDecks }) => {
+export const DeckSearch: React.FC<DeckSearchProps> = ({ onDeckSelect, selectedDecks, searchHistory = [] }) => {
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<PreconDeckSearchResult[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -123,6 +124,28 @@ export const DeckSearch: React.FC<DeckSearchProps> = ({ onDeckSelect, selectedDe
               </div>
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Search History - shown below search */}
+      {searchHistory.length > 0 && (
+        <div className="mt-4">
+          <h3 className="text-sm font-medium text-gray-300 mb-2">Recent Searches</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {searchHistory.slice(0, 4).map((deck) => (
+              <button
+                key={`history-${deck.code}-${deck.name}`}
+                onClick={() => handleDeckSelect(deck)}
+                className="p-2 bg-gray-800 border border-gray-600 rounded-lg text-left hover:bg-gray-700 transition-colors"
+              >
+                <div className="font-medium text-white text-sm">{deck.name}</div>
+                <div className="text-xs text-blue-400">
+                  {deck.primaryCommander || 'Commander TBD'}
+                </div>
+                <div className="text-xs text-gray-500">{deck.theme}</div>
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

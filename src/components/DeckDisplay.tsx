@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { scryfallAPI } from '../services/scryfallAPI';
 import { mtgjsonService } from '../services/mtgjsonService';
 import { cardSynergyService } from '../services/cardSynergyService';
+import { commanderRulesService } from '../services/commanderRulesService';
 import { extractKeywords, getCommanderRelevantKeywords } from '../data/magicKeywords';
 import { useCustomDeck } from '../contexts/CustomDeckContext';
 import { CustomDeckView } from './CustomDeckView';
@@ -35,12 +36,15 @@ export const DeckDisplay: React.FC<DeckDisplayProps> = ({ selectedDecks, onClose
   const [loading, setLoading] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [showCustomDeck, setShowCustomDeck] = useState(false);
+  const [keywordFilter, setKeywordFilter] = useState<string | null>(null); // PHASE 2: Keyword filtering
   const [synergyState, setSynergyState] = useState<SynergyState>({
     isActive: false,
     selectedDecks: [],
     suggestions: [],
     loading: false
   });
+  const [showFlareEffect, setShowFlareEffect] = useState<string | null>(null); // PHASE 2: Visual effects
+  const [showFireworkEffect, setShowFireworkEffect] = useState<string | null>(null); // PHASE 2: Visual effects
 
   const { addCard, customDeck, getCardCount } = useCustomDeck();
 
@@ -197,7 +201,8 @@ export const DeckDisplay: React.FC<DeckDisplayProps> = ({ selectedDecks, onClose
       const suggestions = cardSynergyService.findSynergisticCards(
         synergyState.selectedCommander,
         availableDecks,
-        allDeckCards
+        allDeckCards,
+        customDeck // Pass custom deck for compatibility filtering
       );
 
       setSynergyState(prev => ({
@@ -216,12 +221,93 @@ export const DeckDisplay: React.FC<DeckDisplayProps> = ({ selectedDecks, onClose
     if (errors.length > 0) {
       // Show error message to user
       alert(errors[0].message);
+    } else {
+      // PHASE 2: Trigger visual effects on successful add
+      const effectId = `${card.id}-${Date.now()}`;
+      if (asCommander) {
+        setShowFireworkEffect(effectId);
+        setTimeout(() => setShowFireworkEffect(null), 800); // Match animation duration
+      } else {
+        setShowFlareEffect(effectId);
+        setTimeout(() => setShowFlareEffect(null), 600); // Match animation duration
+      }
     }
   };
 
   const getCardKeywords = (card: ScryfallCard): string[] => {
     const keywords = extractKeywords(card.oracle_text || '');
     return getCommanderRelevantKeywords(keywords);
+  };
+
+  // PHASE 2: Handle keyword filtering
+  const handleKeywordFilter = (keyword: string) => {
+    setKeywordFilter(prevFilter => prevFilter === keyword ? null : keyword);
+  };
+
+  // PHASE 2: Filter cards by keyword while maintaining deck separation
+  const getFilteredCards = (cards: MTGJSONCard[]) => {
+    if (!keywordFilter) return cards;
+    
+    return cards.filter(card => {
+      const keywords = extractKeywords(card.text || '');
+      const relevantKeywords = getCommanderRelevantKeywords(keywords);
+      return relevantKeywords.some(k => k.toLowerCase().includes(keywordFilter.toLowerCase()));
+    });
+  };
+
+  // PHASE 2: Check if card is compatible with current commander's color identity
+  const isCardColorCompatible = (card: MTGJSONCard): boolean => {
+    if (!customDeck.commander) return true; // No commander set, all cards are compatible
+    
+    const commanderColorIdentity = customDeck.commander.color_identity || [];
+    const cardColorIdentity = card.colorIdentity || [];
+    
+    return commanderRulesService.isCardValidForColorIdentity(
+      { color_identity: cardColorIdentity } as ScryfallCard, 
+      commanderColorIdentity
+    );
+  };
+
+  // PHASE 2: Get mana button class based on card colors
+  const getManaButtonClass = (card: MTGJSONCard): string => {
+    const colorIdentity = card.colorIdentity || [];
+    const baseClass = 'text-left p-2 rounded text-sm smooth-transition';
+    
+    // Handle colorless cards
+    if (colorIdentity.length === 0) {
+      return `${baseClass} mana-button-colorless`;
+    }
+    
+    // Handle single color cards
+    if (colorIdentity.length === 1) {
+      const color = colorIdentity[0];
+      switch (color) {
+        case 'W': return `${baseClass} mana-button-white`;
+        case 'U': return `${baseClass} mana-button-blue`;
+        case 'B': return `${baseClass} mana-button-black`;
+        case 'R': return `${baseClass} mana-button-red`;
+        case 'G': return `${baseClass} mana-button-green`;
+        default: return `${baseClass} mana-button-colorless`;
+      }
+    }
+    
+    // Handle multi-color cards with specific combinations
+    const sortedColors = [...colorIdentity].sort();
+    const colorKey = sortedColors.join('');
+    
+    // List of known combinations that have CSS classes
+    const knownCombinations = [
+      'BG', 'BR', 'BU', 'BW', 'GR', 'GU', 'GW', 'RU', 'RW', 'UW',
+      'BGR', 'BGU', 'BGW', 'BRU', 'BRW', 'BUW', 'GRU', 'GRW', 'GUW', 'RUW',
+      'BGRU', 'BGRW', 'BGUW', 'BRUW', 'GRUW', 'BGRUW'
+    ];
+    
+    if (knownCombinations.includes(colorKey)) {
+      return `${baseClass} mana-button-multicolor-${colorKey}`;
+    }
+    
+    // Fallback to generic multicolor for unknown combinations
+    return `${baseClass} mana-button-multicolor`;
   };
 
   if (loading) {
@@ -261,14 +347,6 @@ export const DeckDisplay: React.FC<DeckDisplayProps> = ({ selectedDecks, onClose
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                 </svg>
                 View Custom Deck ({getCardCount()}/100)
-              </button>
-              <button
-                onClick={onClose}
-                className="text-gray-400 hover:text-white p-2"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
               </button>
             </div>
           </div>
@@ -316,20 +394,46 @@ export const DeckDisplay: React.FC<DeckDisplayProps> = ({ selectedDecks, onClose
 
                 {/* Main deck cards */}
                 <div>
-                  <h4 className="text-lg font-medium text-green-400 mb-3">
-                    Deck Cards ({data.deck.mainBoard.length})
-                  </h4>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
-                    {data.deck.mainBoard.map((card) => (
-                      <button
-                        key={`${card.name}-${card.uuid}`}
-                        className="text-left p-2 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white transition-colors"
-                        onClick={() => handleCardClick(card, deckName)}
-                      >
-                        {card.name}
-                      </button>
-                    ))}
-                  </div>
+                  {(() => {
+                    const filteredCards = getFilteredCards(data.deck.mainBoard);
+                    const displayCount = keywordFilter 
+                      ? `${filteredCards.length}/${data.deck.mainBoard.length}` 
+                      : data.deck.mainBoard.length.toString();
+                    
+                    return (
+                      <>
+                        <h4 className="text-lg font-medium text-green-400 mb-3">
+                          Deck Cards ({displayCount})
+                          {keywordFilter && (
+                            <span className="text-xs text-yellow-400 ml-2">
+                              filtered by "{keywordFilter}"
+                            </span>
+                          )}
+                        </h4>
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+                          {filteredCards.map((card) => {
+                            const isCompatible = isCardColorCompatible(card);
+                            const manaButtonClass = getManaButtonClass(card);
+                            return (
+                              <button
+                                key={`${card.name}-${card.uuid}`}
+                                className={`${manaButtonClass} transition-colors ${
+                                  isCompatible 
+                                    ? 'hover:brightness-110' 
+                                    : 'opacity-50 cursor-not-allowed brightness-50'
+                                }`}
+                                onClick={() => isCompatible ? handleCardClick(card, deckName) : undefined}
+                                disabled={!isCompatible}
+                                title={isCompatible ? undefined : 'Incompatible with commander\'s color identity'}
+                              >
+                                {card.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             ))}
@@ -339,7 +443,9 @@ export const DeckDisplay: React.FC<DeckDisplayProps> = ({ selectedDecks, onClose
         {/* Selected card sidebar */}
         {selectedCard && (
           <div className="w-80 bg-gray-800 p-6 overflow-y-auto border-l border-gray-700">
-            <h3 className="text-lg font-semibold text-white mb-4">Card Details</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Card Details</h3>
+            </div>
             
             {selectedCard.image_uris?.normal && (
               <img
@@ -350,12 +456,6 @@ export const DeckDisplay: React.FC<DeckDisplayProps> = ({ selectedDecks, onClose
             )}
             
             <h4 className="font-bold text-white text-lg mb-2">{selectedCard.name}</h4>
-            
-            {selectedCard.mana_cost && (
-              <p className="text-sm text-gray-300 mb-2">
-                <span className="font-medium">Mana Cost:</span> {selectedCard.mana_cost}
-              </p>
-            )}
             
             <p className="text-sm text-gray-300 mb-2">
               <span className="font-medium">Type:</span> {selectedCard.type_line}
@@ -374,8 +474,9 @@ export const DeckDisplay: React.FC<DeckDisplayProps> = ({ selectedDecks, onClose
             <div className="mb-4 space-y-2">
               <button
                 onClick={() => handleAddToCustomDeck(selectedCard, false)}
-                className="w-full px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded 
-                         transition-colors duration-200 text-sm font-medium"
+                className={`w-full px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded 
+                         transition-colors duration-200 text-sm font-medium smooth-transition
+                         ${showFlareEffect?.includes(selectedCard.id) ? 'neon-flare' : ''}`}
               >
                 Add to Deck
               </button>
@@ -384,8 +485,9 @@ export const DeckDisplay: React.FC<DeckDisplayProps> = ({ selectedDecks, onClose
                selectedCard.supertypes?.includes('Legendary') && (
                 <button
                   onClick={() => handleAddToCustomDeck(selectedCard, true)}
-                  className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded 
-                           transition-colors duration-200 text-sm font-medium"
+                  className={`w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded 
+                           transition-colors duration-200 text-sm font-medium smooth-transition
+                           ${showFireworkEffect?.includes(selectedCard.id) ? 'firework' : ''}`}
                 >
                   Set as Commander
                 </button>
@@ -398,14 +500,33 @@ export const DeckDisplay: React.FC<DeckDisplayProps> = ({ selectedDecks, onClose
                 <p className="text-sm font-medium text-gray-200 mb-2">Detected Keywords:</p>
                 <div className="flex flex-wrap gap-1">
                   {getCardKeywords(selectedCard).map((keyword) => (
-                    <span
+                    <button
                       key={keyword}
-                      className="px-2 py-1 bg-blue-600 text-white text-xs rounded"
+                      onClick={() => handleKeywordFilter(keyword)}
+                      className={`px-2 py-1 text-xs rounded transition-colors duration-200 ${
+                        keywordFilter === keyword
+                          ? 'bg-yellow-600 text-white ring-2 ring-yellow-400'
+                          : 'bg-blue-600 hover:bg-blue-700 text-white'
+                      }`}
+                      title={`Click to filter cards by "${keyword}"`}
                     >
                       {keyword}
-                    </span>
+                    </button>
                   ))}
                 </div>
+                {keywordFilter && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-xs text-yellow-400">
+                      Filtering by: "{keywordFilter}"
+                    </span>
+                    <button
+                      onClick={() => setKeywordFilter(null)}
+                      className="text-xs text-gray-400 hover:text-white underline"
+                    >
+                      Clear filter
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -472,8 +593,10 @@ export const DeckDisplay: React.FC<DeckDisplayProps> = ({ selectedDecks, onClose
                           {synergyState.suggestions.slice(0, 10).map((suggestion, index) => (
                             <div key={index} className="bg-gray-700 rounded p-2">
                               <button
-                                onClick={() => setSelectedCard(suggestion.card)}
-                                className="text-left w-full"
+                                onClick={() => {
+                                  setSelectedCard(suggestion.card);
+                                }}
+                                className="text-left w-full hover:bg-gray-600 rounded p-1 transition-colors"
                               >
                                 <p className="text-xs font-medium text-white">
                                   {suggestion.card.name}
@@ -485,13 +608,26 @@ export const DeckDisplay: React.FC<DeckDisplayProps> = ({ selectedDecks, onClose
                                   {suggestion.synergyReasons.join(', ')}
                                 </p>
                               </button>
-                              <button
-                                onClick={() => handleAddToCustomDeck(suggestion.card, false)}
-                                className="mt-1 w-full px-2 py-1 bg-green-600 hover:bg-green-700 
-                                         text-white rounded text-xs transition-colors duration-200"
-                              >
-                                Add to Deck
-                              </button>
+                              <div className="mt-1 flex gap-1">
+                                <button
+                                  onClick={() => handleAddToCustomDeck(suggestion.card, false)}
+                                  className={`flex-1 px-2 py-1 bg-green-600 hover:bg-green-700 
+                                           text-white rounded text-xs transition-colors duration-200 smooth-transition
+                                           ${showFlareEffect?.includes(suggestion.card.id) ? 'neon-flare' : ''}`}
+                                >
+                                  Add to Deck
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setSelectedCard(suggestion.card);
+                                  }}
+                                  className="px-2 py-1 bg-blue-600 hover:bg-blue-700 
+                                           text-white rounded text-xs transition-colors duration-200"
+                                  title="View card details"
+                                >
+                                  View
+                                </button>
+                              </div>
                             </div>
                           ))}
                         </div>

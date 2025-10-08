@@ -1,6 +1,8 @@
 import type { ScryfallCard } from '../types/scryfall';
 import type { MTGJSONDeck } from '../types/mtgjson';
+import type { CustomDeck } from '../types/customDeck';
 import { extractKeywords, getCommanderRelevantKeywords } from '../data/magicKeywords';
+import { commanderRulesService } from './commanderRulesService';
 
 export interface SynergyCard {
   card: ScryfallCard;
@@ -10,14 +12,26 @@ export interface SynergyCard {
 }
 
 export class CardSynergyService {
-  // Find cards that synergize with a given commander
+  // Find cards that synergize with a given commander, filtering out incompatible cards
   findSynergisticCards(
     commander: ScryfallCard,
     availableDecks: MTGJSONDeck[],
-    deckCards: Map<string, Map<string, ScryfallCard>>
+    deckCards: Map<string, Map<string, ScryfallCard>>,
+    customDeck?: CustomDeck
   ): SynergyCard[] {
     const commanderKeywords = this.getCommanderKeywords(commander);
     const synergisticCards: SynergyCard[] = [];
+    const commanderColorIdentity = commander.color_identity || [];
+
+    // Get list of cards already in custom deck for singleton rule checking
+    const cardsInCustomDeck = new Set<string>();
+    if (customDeck) {
+      customDeck.cards.forEach(deckCard => {
+        if (!deckCard.isCommander) {
+          cardsInCustomDeck.add(deckCard.card.name);
+        }
+      });
+    }
 
     availableDecks.forEach(deck => {
       const deckCardMap = deckCards.get(deck.name);
@@ -29,6 +43,21 @@ export class CardSynergyService {
 
         // Skip if it's the same commander
         if (scryfallCard.name === commander.name) return;
+
+        // PHASE 2: Filter out incompatible cards
+        
+        // 1. Color identity compatibility check
+        if (!commanderRulesService.isCardValidForColorIdentity(scryfallCard, commanderColorIdentity)) {
+          return; // Skip color-incompatible cards
+        }
+
+        // 2. Singleton rule check (skip cards already in custom deck)
+        if (cardsInCustomDeck.has(scryfallCard.name)) {
+          const isBasicLand = scryfallCard.supertypes?.includes('Basic') && scryfallCard.types?.includes('Land');
+          if (!isBasicLand) {
+            return; // Skip cards already in deck (except basic lands)
+          }
+        }
 
         const synergy = this.calculateSynergy(commander, scryfallCard, commanderKeywords);
         
