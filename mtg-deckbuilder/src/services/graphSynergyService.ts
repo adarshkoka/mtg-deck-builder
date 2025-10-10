@@ -226,7 +226,9 @@ export class GraphSynergyService {
       }
 
       // Color identity check
-      if (!commanderRulesService.isCardValidForColorIdentity(targetNode.card, commanderColorIdentity)) {
+      const isValidColor = commanderRulesService.isCardValidForColorIdentity(targetNode.card, commanderColorIdentity);
+      if (!isValidColor) {
+        console.log(`❌ Card ${targetNode.card.name} filtered out - color identity mismatch. Card colors: [${targetNode.card.color_identity?.join(', ') || 'none'}], Commander allows: [${commanderColorIdentity.join(', ') || 'none'}]`);
         return;
       }
 
@@ -295,7 +297,9 @@ export class GraphSynergyService {
         if (!selectedDecks.includes(targetNode.originDeck)) return;
 
         // Color identity check
-        if (!commanderRulesService.isCardValidForColorIdentity(targetNode.card, commanderColorIdentity)) {
+        const isValidColor = commanderRulesService.isCardValidForColorIdentity(targetNode.card, commanderColorIdentity);
+        if (!isValidColor) {
+          console.log(`❌ Level 2 card ${targetNode.card.name} filtered out - color identity mismatch. Card colors: [${targetNode.card.color_identity?.join(', ') || 'none'}], Commander allows: [${commanderColorIdentity.join(', ') || 'none'}]`);
           return;
         }
 

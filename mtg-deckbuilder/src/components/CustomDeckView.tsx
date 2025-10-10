@@ -1,13 +1,27 @@
 import React, { useState } from 'react';
 import { useCustomDeck } from '../contexts/CustomDeckContext';
+import { mainService, type FastAPIAnalysisResponse } from '../services/mainService';
 
 interface CustomDeckViewProps {
   onClose: () => void;
 }
 
+interface AIAnalysisState {
+  isOpen: boolean;
+  loading: boolean;
+  result: FastAPIAnalysisResponse | null;
+  error: string | null;
+}
+
 export const CustomDeckView: React.FC<CustomDeckViewProps> = ({ onClose }) => {
   const { customDeck, removeCard, removeCommander, validateDeck, getCardCount } = useCustomDeck();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid'); // PHASE 2: Toggle between grid and list view
+  const [aiAnalysisState, setAiAnalysisState] = useState<AIAnalysisState>({
+    isOpen: false,
+    loading: false,
+    result: null,
+    error: null
+  });
   
   const validation = validateDeck();
   const cardCount = getCardCount();
@@ -18,6 +32,53 @@ export const CustomDeckView: React.FC<CustomDeckViewProps> = ({ onClose }) => {
 
   const handleRemoveCommander = () => {
     removeCommander();
+  };
+
+  // AI Analysis handlers
+  const handleAnalyzeCustomDeck = async () => {
+    if (customDeck.cards.length === 0) {
+      alert('Please add some cards to your deck before analyzing.');
+      return;
+    }
+
+    setAiAnalysisState({
+      isOpen: true,
+      loading: true,
+      result: null,
+      error: null
+    });
+
+    try {
+      // Extract ScryfallCard objects from the custom deck
+      const scryfallCards = new Map<string, any>();
+      customDeck.cards.forEach(deckCard => {
+        scryfallCards.set(deckCard.card.name, deckCard.card);
+      });
+
+      const result = await mainService.analyzeCustomDeckCards(scryfallCards);
+      setAiAnalysisState(prev => ({
+        ...prev,
+        loading: false,
+        result,
+        error: null
+      }));
+    } catch (error) {
+      console.error('AI analysis failed:', error);
+      setAiAnalysisState(prev => ({
+        ...prev,
+        loading: false,
+        error: error instanceof Error ? error.message : 'Analysis failed'
+      }));
+    }
+  };
+
+  const closeAiAnalysis = () => {
+    setAiAnalysisState({
+      isOpen: false,
+      loading: false,
+      result: null,
+      error: null
+    });
   };
 
   // PHASE 2: Download deck as text file
@@ -72,6 +133,22 @@ export const CustomDeckView: React.FC<CustomDeckViewProps> = ({ onClose }) => {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            {/* AI Analysis Button */}
+            {customDeck.cards.length > 0 && (
+              <button
+                onClick={handleAnalyzeCustomDeck}
+                className="px-3 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 
+                         text-white rounded transition-all duration-200 flex items-center gap-2"
+                title="Analyze deck with AI"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                        d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                AI Analysis
+              </button>
+            )}
+            
             {/* PHASE 2: Download Button */}
             {customDeck.cards.length > 0 && (
               <button
@@ -310,6 +387,114 @@ export const CustomDeckView: React.FC<CustomDeckViewProps> = ({ onClose }) => {
           </div>
         </div>
       </div>
+
+      {/* AI Analysis Modal */}
+      {aiAnalysisState.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex justify-between items-center p-6 border-b border-gray-700">
+              <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                        d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                AI Analysis - {customDeck.name}
+              </h2>
+              <button
+                onClick={closeAiAnalysis}
+                className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                <svg className="w-6 h-6 text-gray-400 hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {aiAnalysisState.loading ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+                  <p className="text-gray-400 text-lg">Analyzing your deck with AI...</p>
+                  <p className="text-gray-500 text-sm mt-2">This may take a few moments</p>
+                </div>
+              ) : aiAnalysisState.error ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="bg-red-900/30 border border-red-700 rounded-lg p-6 max-w-md text-center">
+                    <svg className="w-12 h-12 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    <h3 className="text-lg font-semibold text-red-400 mb-2">Analysis Failed</h3>
+                    <p className="text-red-300 whitespace-pre-wrap">{aiAnalysisState.error}</p>
+                    <button
+                      onClick={closeAiAnalysis}
+                      className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              ) : aiAnalysisState.result ? (
+                <div className="space-y-6">
+                  {/* Analysis Summary */}
+                  <div className="bg-gray-800 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-lg font-semibold text-white">Analysis Summary</h3>
+                      <div className="flex items-center gap-4 text-sm text-gray-400">
+                        <span>Cards Analyzed: {aiAnalysisState.result.total_found}/{aiAnalysisState.result.total_requested}</span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                      <div className="bg-gray-700 rounded p-3">
+                        <div className="text-gray-400">Total Cards</div>
+                        <div className="text-xl font-bold text-white">{aiAnalysisState.result.total_found}</div>
+                      </div>
+                      <div className="bg-gray-700 rounded p-3">
+                        <div className="text-gray-400">Analysis Status</div>
+                        <div className="text-xl font-bold text-green-400">Complete</div>
+                      </div>
+                      <div className="bg-gray-700 rounded p-3">
+                        <div className="text-gray-400">AI Model</div>
+                        <div className="text-xl font-bold text-blue-400">Gemini 2.5</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* AI Analysis */}
+                  <div className="bg-gray-800 rounded-lg p-4">
+                    <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+                      <svg className="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      </svg>
+                      AI Analysis
+                    </h3>
+                    <div className="prose prose-invert max-w-none">
+                      <div className="whitespace-pre-wrap text-gray-300 leading-relaxed">
+                        {aiAnalysisState.result.ai_analysis}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Cards Analyzed */}
+                  <div className="bg-gray-800 rounded-lg p-4">
+                    <h3 className="text-lg font-semibold text-white mb-3">Cards Analyzed</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-64 overflow-y-auto">
+                      {aiAnalysisState.result.cards.map((card, index) => (
+                        <div key={index} className="bg-gray-700 rounded p-3 text-sm">
+                          <div className="font-medium text-white">{card.name}</div>
+                          <div className="text-gray-400">{card.type_line}</div>
+                          <div className="text-gray-500">{card.mana_cost || 'No cost'}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

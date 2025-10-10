@@ -12,6 +12,7 @@ export interface ScryfallCard {
   supertypes?: string[];
   types?: string[];
   subtypes?: string[];
+  multiverse_ids?: number[]; // Array of multiverse IDs
   legalities: {
     commander: string;
   };

@@ -4,6 +4,7 @@ import { mtgjsonService } from '../services/mtgjsonService';
 import { graphSynergyService, type GraphSynergyCard } from '../services/graphSynergyService';
 import { commanderRulesService } from '../services/commanderRulesService';
 import { extractKeywords, getCommanderRelevantKeywords } from '../data/magicKeywords';
+import { SynergyWindow } from './SynergyWindow';
 import { useCustomDeck } from '../contexts/CustomDeckContext';
 import { CustomDeckView } from './CustomDeckView';
 import type { PreconDeckSearchResult } from '../types/mtgjson';
@@ -45,6 +46,7 @@ export const DeckDisplay: React.FC<DeckDisplayProps> = ({ selectedDecks }) => {
   });
   const [showFlareEffect, setShowFlareEffect] = useState<string | null>(null); // PHASE 2: Visual effects
   const [showFireworkEffect, setShowFireworkEffect] = useState<string | null>(null); // PHASE 2: Visual effects
+  const [synergyWindowOpen, setSynergyWindowOpen] = useState(false); // Control synergy window visibility
 
   const { addCard, customDeck, getCardCount } = useCustomDeck();
 
@@ -225,6 +227,7 @@ export const DeckDisplay: React.FC<DeckDisplayProps> = ({ selectedDecks }) => {
 
     console.log('✅ Starting synergy analysis...');
     setSynergyState(prev => ({ ...prev, loading: true }));
+    // Clear synergy results for new search
 
     try {
       // Always include the commander's deck + selected decks for graph building
@@ -671,83 +674,20 @@ export const DeckDisplay: React.FC<DeckDisplayProps> = ({ selectedDecks }) => {
                       </button>
                     )}
 
-                    {/* Synergy Results */}
+                    {/* Synergy Results - Open Window Button */}
                     {synergyState.suggestions.length > 0 && (
-                      <div className="max-h-80 overflow-y-auto">
-                        <p className="text-sm font-medium text-yellow-400 mb-2">
-                          Synergistic Cards ({synergyState.suggestions.length})
-                        </p>
-                        <p className="text-xs text-gray-400 mb-3">
-                          Cards that work well with your commander:
-                        </p>
-                        <div className="space-y-2">
-                          {synergyState.suggestions.slice(0, 15).map((suggestion, index) => (
-                            <div key={`synergy-${index}`} className="bg-gray-700 rounded p-2">
-                              <div className="flex items-center gap-2">
-                                {/* Small card image - click to view card */}
-                                {suggestion.card.image_uris?.normal && (
-                                  <button
-                                    onClick={() => setSelectedCard(suggestion.card)}
-                                    className="flex-shrink-0 hover:scale-105 transition-transform"
-                                    title="Click to view card"
-                                  >
-                                    <img
-                                      src={suggestion.card.image_uris.normal}
-                                      alt={suggestion.card.name}
-                                      className="w-12 h-16 object-cover rounded border border-gray-500 hover:border-yellow-400"
-                                    />
-                                  </button>
-                                )}
-                                
-                                {/* Card info */}
-                                <div className="flex-1">
-                                  <button
-                                    onClick={() => {
-                                      setSelectedCard(suggestion.card);
-                                    }}
-                                    className="text-left w-full hover:bg-gray-600 rounded p-1 transition-colors"
-                                  >
-                                    <p className="text-xs font-medium text-white">
-                                      {suggestion.card.name}
-                                    </p>
-                                    <p className="text-xs text-gray-400">
-                                      From: {suggestion.sourceDeck}
-                                    </p>
-                                    {/* Commented out synergy explanation per user request */}
-                                    {/* <p className="text-xs text-yellow-300">
-                                      {suggestion.synergyReasons.join(', ')}
-                                    </p> */}
-                                    {suggestion.chainedThrough && (
-                                      <p className="text-xs text-purple-300 mt-1">
-                                        → Works with: {suggestion.chainedThrough}
-                                      </p>
-                                    )}
-                                  </button>
-                                </div>
-                              </div>
-                              <div className="mt-1 flex gap-1">
-                                <button
-                                  onClick={() => handleAddToCustomDeck(suggestion.card, false)}
-                                  className={`flex-1 px-2 py-1 bg-green-600 hover:bg-green-700 
-                                           text-white rounded text-xs transition-colors duration-200 smooth-transition
-                                           ${showFlareEffect?.includes(suggestion.card.id) ? 'neon-flare' : ''}`}
-                                >
-                                  Add to Deck
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setSelectedCard(suggestion.card);
-                                  }}
-                                  className="px-2 py-1 bg-blue-600 hover:bg-blue-700 
-                                           text-white rounded text-xs transition-colors duration-200"
-                                  title="View card details"
-                                >
-                                  View
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                      <div className="mb-4">
+                        <button
+                          onClick={() => setSynergyWindowOpen(true)}
+                          className="w-full p-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg 
+                                   transition-colors flex items-center justify-center gap-2"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                          </svg>
+                          View {synergyState.suggestions.length} Synergistic Cards
+                        </button>
                       </div>
                     )}
                   </div>
@@ -769,6 +709,18 @@ export const DeckDisplay: React.FC<DeckDisplayProps> = ({ selectedDecks }) => {
       {/* Custom Deck Modal */}
       {showCustomDeck && (
         <CustomDeckView onClose={() => setShowCustomDeck(false)} />
+      )}
+
+      {/* Synergy Window */}
+      {synergyWindowOpen && (
+        <SynergyWindow
+          isOpen={synergyWindowOpen}
+          synergies={synergyState.suggestions}
+          loading={synergyState.loading}
+          onClose={() => setSynergyWindowOpen(false)}
+          onCardSelect={setSelectedCard}
+          commander={synergyState.selectedCommander || undefined}
+        />
       )}
     </div>
   );
