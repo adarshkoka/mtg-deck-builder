@@ -1,9 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
-import type { CustomDeck, ValidationError } from '../types/customDeck';
-import type { ScryfallCard } from '../types/scryfall';
+import type { CustomDeck, ValidationError } from '../types/deck';
+import type { ScryfallCard } from '../types/deck';
 import { commanderRulesService } from '../services/commanderRulesService';
-import { storageService } from '../services/storageService'; // PHASE 2: Persistent storage
 
 interface CustomDeckContextType {
   customDeck: CustomDeck;
@@ -14,10 +13,37 @@ interface CustomDeckContextType {
   clearDeck: () => void;
   validateDeck: () => { isValid: boolean; errors: ValidationError[]; warnings: ValidationError[] };
   getCardCount: () => number;
+  // Replace the whole working deck at once (used when loading an AI recommendation or a saved deck).
+  replaceDeck: (deck: CustomDeck) => void;
+}
+
+// The working deck is kept in the browser (localStorage), so a page refresh keeps it.
+// Finished decks are saved on the server (POST /decks); this is only the working copy.
+const STORAGE_KEY = 'mtg_custom_deck';
+
+function loadSavedDeck(): CustomDeck | null {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? (JSON.parse(stored) as CustomDeck) : null;
+  } catch {
+    return null; // storage blocked or corrupted: start with an empty deck
+  }
+}
+
+function saveDeck(deck: CustomDeck | null): void {
+  try {
+    if (deck) localStorage.setItem(STORAGE_KEY, JSON.stringify(deck));
+    else localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // storage full or blocked: the deck still works, it just won't survive a refresh
+  }
 }
 
 const CustomDeckContext = createContext<CustomDeckContextType | undefined>(undefined);
 
+// The hook lives next to its provider on purpose; the only cost is that editing this file
+// reloads the page instead of hot-swapping during development.
+// eslint-disable-next-line react-refresh/only-export-components
 export const useCustomDeck = () => {
   const context = useContext(CustomDeckContext);
   if (!context) {
@@ -31,9 +57,9 @@ interface CustomDeckProviderProps {
 }
 
 export const CustomDeckProvider: React.FC<CustomDeckProviderProps> = ({ children }) => {
-  // PHASE 2: Load saved deck from localStorage on initialization
+  // Load the working deck from localStorage when the app starts
   const [customDeck, setCustomDeck] = useState<CustomDeck>(() => {
-    const savedDeck = storageService.loadCustomDeck();
+    const savedDeck = loadSavedDeck();
     return savedDeck || {
       name: 'My Custom Deck',
       cards: [],
@@ -41,9 +67,9 @@ export const CustomDeckProvider: React.FC<CustomDeckProviderProps> = ({ children
     };
   });
 
-  // PHASE 2: Auto-save deck changes to localStorage
+  // Save every change to localStorage
   useEffect(() => {
-    storageService.saveCustomDeck(customDeck);
+    saveDeck(customDeck);
   }, [customDeck]);
 
   const addCard = (card: ScryfallCard, sourceDeck?: string, asCommander: boolean = false): ValidationError[] => {
@@ -176,8 +202,7 @@ export const CustomDeckProvider: React.FC<CustomDeckProviderProps> = ({ children
       colorIdentity: []
     };
     setCustomDeck(emptyDeck);
-    // PHASE 2: Clear from storage as well
-    storageService.clearCustomDeck();
+    saveDeck(null);
   };
 
   const validateDeck = () => {
@@ -189,10 +214,13 @@ export const CustomDeckProvider: React.FC<CustomDeckProviderProps> = ({ children
     };
   };
 
+  // Total cards including the commander (a finished deck has exactly 100).
   const getCardCount = (): number => {
-    return customDeck.cards.reduce((total, deckCard) => {
-      return deckCard.isCommander ? total : total + deckCard.quantity;
-    }, 0);
+    return customDeck.cards.reduce((total, deckCard) => total + deckCard.quantity, 0);
+  };
+
+  const replaceDeck = (deck: CustomDeck) => {
+    setCustomDeck(deck);
   };
 
   const value: CustomDeckContextType = {
@@ -203,7 +231,8 @@ export const CustomDeckProvider: React.FC<CustomDeckProviderProps> = ({ children
     removeCommander,
     clearDeck,
     validateDeck,
-    getCardCount
+    getCardCount,
+    replaceDeck
   };
 
   return (

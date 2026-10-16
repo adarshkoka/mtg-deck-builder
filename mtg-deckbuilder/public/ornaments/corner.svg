@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 13 13">
+  <!-- The knot at each corner of a frame: a mahogany diamond with an ivory inlay and a burgundy dot. -->
+  <path d="M6.5 0 L13 6.5 L6.5 13 L0 6.5 Z" fill="#43201a"/>
+  <path d="M6.5 3 L10 6.5 L6.5 10 L3 6.5 Z" fill="#f6eedb"/>
+  <circle cx="6.5" cy="6.5" r="1.3" fill="#7a1f2e"/>
+</svg>

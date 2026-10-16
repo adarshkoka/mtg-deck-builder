@@ -1,73 +1,56 @@
-# React + TypeScript + Vite
+# MTG Commander Deck Builder
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Build a Commander deck from the cards you already own:
 
-Currently, two official plugins are available:
+1. **Upload your collection** as a CSV (Moxfield, ManaBox, Archidekt, or any file with a `Name` column).
+2. **Pick a commander** from the legendary creatures you own.
+3. **An AI agent builds the deck** from your collection: 100 cards, legal, balanced, with
+   a reason for every card. You watch every step it takes in a live trace.
+4. **You review it**: reject cards, give feedback, let the agent revise, then save.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Manual deck building, card filters, and "find synergistic cards" work without the AI too.
 
-## React Compiler
+## Architecture
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```
+React (Vite, Tailwind) ──X-API-Key──▶ FastAPI ─────────────┐
+                                        │  202 + job id      │ reads
+                                        ▼                    ▼
+                                      Redis ──▶ Celery worker ──▶ Postgres + pgvector
+                                                  │      │
+                                     Scryfall API ◀┘      └▶ Gemini (agent, embeddings)
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+MCP server (stdio) ── same tools ──▶ Postgres   (for Claude Code / Claude Desktop)
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+- **Collection import** (`server/app/collection/`): per-row validated CSV parsing;
+  batched Scryfall lookups (75 per request) with rate limiting, retry/backoff, caching, and
+  de-duplication; Postgres as a persistent card cache; progress reporting.
+- **Deck-building agent** (`server/app/agent/`): a hand-written tool-calling loop over
+  Gemini with parallel tool calls, code-level validation of the final deck, and a
+  step-by-step trace. The same agent is also built on Pydantic AI (Gemini or Claude), with
+  a LangGraph workflow for comparison. See `docs/agent-frameworks.md`.
+- **Semantic search** (`server/app/collection/synergy.py`): card embeddings in pgvector,
+  hybrid retrieval (vector + full-text) merged with Reciprocal Rank Fusion.
+- **Tools for other agents** (`server/app/mcp_server.py`): the collection and deck tools as
+  an MCP server; registered for Claude Code in `.mcp.json`. See `docs/tools.md`.
+- **Evals** (`server/evals/`): a golden set of collections scored on legality, ownership,
+  trap cards (including a prompt injection), and balance; offline in CI, live on request.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Quick start
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```sh
+cp server/.env.example server/.env           # add GEMINI_API_KEY and an API_KEY
+cp mtg-deckbuilder/.env.example mtg-deckbuilder/.env.local   # same API_KEY as VITE_API_KEY
+API_KEY=<your key> docker compose up --build
 ```
+
+Then open http://localhost:3000. The API docs are at http://localhost:8080/docs.
+
+For development without containers, see `server/README.md` and run the frontend with
+`npm install && npm run dev` in `mtg-deckbuilder/`.
+
+## Deployment
+
+`docs/deploy.md` maps each container to Google Cloud (Cloud Run service and worker pool,
+Cloud SQL with pgvector, Memorystore, Secret Manager) with the commands to deploy.

@@ -1,1 +1,453 @@
 @import "tailwindcss";
+
+/* =============================================================================
+   Look and feel: an illuminated manuscript. Aged ivory paper, mahogany ink,
+   burgundy and chestnut accents, ruled frames with square corners.
+   Components use the named classes below (frame, btn, tab, field, ...) so the
+   whole style lives here, in one place.
+   ========================================================================== */
+
+/* Typeface: Sovngarde, used for all text. Its letters are drawn small for their
+   size, so size-adjust scales them up to match the sizes the layout expects. */
+@font-face {
+  font-family: "Sovngarde";
+  src: url("/fonts/Sovngarde-Light.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  size-adjust: 112%;
+}
+
+/* Palette. Each name becomes Tailwind utilities, e.g. bg-ivory-100, text-burgundy-700,
+   border-mahogany-700. */
+@theme {
+  /* Ivory: the paper */
+  --color-ivory-50: #fbf7ec;
+  --color-ivory-100: #f6eedb;
+  --color-ivory-200: #efe3c7;
+  --color-ivory-300: #e4d3b0;
+  --color-ivory-400: #d2bc8e;
+
+  /* Burgundy red: actions, highlights, titles */
+  --color-burgundy-400: #a8404e;
+  --color-burgundy-500: #8f2a39;
+  --color-burgundy-600: #7a1f2e;
+  --color-burgundy-700: #631724;
+  --color-burgundy-800: #4c101a;
+
+  /* Chestnut: secondary accents */
+  --color-chestnut-300: #c7967a;
+  --color-chestnut-400: #b06e52;
+  --color-chestnut-500: #954535;
+  --color-chestnut-600: #7d3a2c;
+
+  /* Mahogany: the ink (text and frame lines) */
+  --color-mahogany-400: #7a4535;
+  --color-mahogany-500: #64301f;
+  --color-mahogany-600: #52261a;
+  --color-mahogany-700: #43201a;
+  --color-mahogany-800: #36160f;
+  --color-mahogany-900: #24100b;
+
+  /* Tailwind's default family, so every element (inputs and buttons too) uses it. */
+  --font-sans: "Sovngarde", Georgia, serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+@layer base {
+  html {
+    /* Sovngarde has one weight. Never let the browser fake a bold version: hierarchy
+       comes from size, colour and letter-spacing instead. */
+    font-synthesis-weight: none;
+  }
+
+  /* The page: ivory paper with faint stains, fine grain, and darker, aged edges. */
+  body {
+    color: var(--color-mahogany-800);
+    background-color: var(--color-ivory-200);
+    background-image:
+      radial-gradient(ellipse 120% 90% at 50% 35%, transparent 55%, rgb(80 40 20 / 0.22) 100%),
+      url("/textures/paper-stains.png"),
+      url("/textures/paper-grain.png");
+    background-size:
+      100% 100%,
+      1024px 1024px,
+      256px 256px;
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background: var(--color-burgundy-600);
+    color: var(--color-ivory-50);
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--color-burgundy-600);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-burgundy-500);
+    outline-offset: 2px;
+  }
+
+  * {
+    scrollbar-color: var(--color-chestnut-400) transparent;
+    scrollbar-width: thin;
+  }
+}
+
+@layer components {
+  /* --- Frames ------------------------------------------------------------------
+     A panel ruled like a manuscript page: a heavy outer rule, a hairline inner
+     rule, and a small knot at each corner. Square corners throughout. */
+  .frame {
+    position: relative;
+    padding: 1.75rem;
+    border: 2px solid var(--color-mahogany-700);
+    background-color: rgb(251 247 236 / 0.55);
+  }
+  .frame::before {
+    /* the hairline inner rule */
+    content: "";
+    position: absolute;
+    inset: 4px;
+    border: 1px solid var(--color-mahogany-700);
+    pointer-events: none;
+  }
+  .frame::after {
+    /* the corner knots, drawn over both rules */
+    content: "";
+    position: absolute;
+    inset: -2px;
+    pointer-events: none;
+    background-image: url("/ornaments/corner.svg"), url("/ornaments/corner.svg"),
+      url("/ornaments/corner.svg"), url("/ornaments/corner.svg");
+    background-repeat: no-repeat;
+    background-size: 13px 13px;
+    background-position:
+      left top,
+      right top,
+      left bottom,
+      right bottom;
+  }
+
+  /* An opaque framed sheet of paper, for dialogs that sit above the page. */
+  .sheet {
+    background-color: var(--color-ivory-100);
+    background-image: url("/textures/paper-stains.png"), url("/textures/paper-grain.png");
+    background-size:
+      1024px 1024px,
+      256px 256px;
+  }
+
+  /* The dimmed page behind a dialog. */
+  .backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem;
+    background: rgb(36 16 11 / 0.62);
+  }
+
+  /* A plain, single-ruled box for items inside a frame (list rows, notes). */
+  .panel {
+    border: 1px solid rgb(67 32 26 / 0.3);
+    background-color: rgb(251 247 236 / 0.7);
+  }
+
+  /* A selectable row. aria-selected="true" marks the chosen one. */
+  .entry {
+    border: 1px solid rgb(67 32 26 / 0.3);
+    background-color: rgb(251 247 236 / 0.7);
+    transition: background-color 120ms ease;
+  }
+  .entry:hover {
+    background-color: var(--color-ivory-100);
+  }
+  .entry[aria-selected="true"] {
+    background-color: var(--color-ivory-300);
+    border-color: var(--color-burgundy-600);
+    box-shadow: inset 4px 0 0 var(--color-burgundy-600);
+  }
+
+  /* --- Headings and rules ------------------------------------------------------
+     A section title followed by a double rule that ends in a small diamond. */
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    font-size: 1.6rem;
+    line-height: 1.2;
+    letter-spacing: 0.02em;
+    color: var(--color-burgundy-700);
+  }
+  .section-title::after {
+    content: "";
+    flex: 1 1 auto;
+    min-width: 2rem;
+    height: 11px;
+    background:
+      url("/ornaments/diamond.svg") right center / 11px 11px no-repeat,
+      linear-gradient(var(--color-mahogany-700), var(--color-mahogany-700)) left 3px / calc(100% - 14px) 1px no-repeat,
+      linear-gradient(var(--color-mahogany-700), var(--color-mahogany-700)) left 7px / calc(100% - 14px) 1px no-repeat;
+  }
+  /* A smaller title for groups inside a section (card types, roles). */
+  .group-title {
+    font-size: 0.85rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-chestnut-600);
+    border-bottom: 1px solid rgb(67 32 26 / 0.3);
+    padding-bottom: 0.2rem;
+  }
+
+  /* A full-width double rule with a knot in the middle. */
+  .rule {
+    height: 13px;
+    background:
+      url("/ornaments/corner.svg") center / 13px 13px no-repeat,
+      linear-gradient(var(--color-mahogany-700), var(--color-mahogany-700)) left 4px / calc(50% - 12px) 1px no-repeat,
+      linear-gradient(var(--color-mahogany-700), var(--color-mahogany-700)) left 8px / calc(50% - 12px) 1px no-repeat,
+      linear-gradient(var(--color-mahogany-700), var(--color-mahogany-700)) right 4px / calc(50% - 12px) 1px no-repeat,
+      linear-gradient(var(--color-mahogany-700), var(--color-mahogany-700)) right 8px / calc(50% - 12px) 1px no-repeat;
+  }
+
+  /* Small uppercase label above a field or a value. */
+  .label {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 0.8rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-chestnut-600);
+  }
+
+  /* --- Buttons -----------------------------------------------------------------
+     Square, with a fine inner rule that echoes the frames. */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1.15rem;
+    border: 1px solid var(--color-mahogany-800);
+    font-size: 1rem;
+    line-height: 1.2;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    user-select: none;
+    transition:
+      background-color 120ms ease,
+      color 120ms ease,
+      box-shadow 120ms ease;
+  }
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background-color: var(--color-burgundy-600);
+    color: var(--color-ivory-50);
+    box-shadow:
+      inset 0 0 0 2px var(--color-burgundy-600),
+      inset 0 0 0 3px rgb(251 247 236 / 0.5),
+      0 1px 0 rgb(36 16 11 / 0.25);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background-color: var(--color-burgundy-700);
+    box-shadow:
+      inset 0 0 0 2px var(--color-burgundy-700),
+      inset 0 0 0 3px rgb(251 247 236 / 0.6),
+      0 1px 0 rgb(36 16 11 / 0.25);
+  }
+  .btn-secondary {
+    background-color: var(--color-ivory-50);
+    color: var(--color-mahogany-800);
+    box-shadow:
+      inset 0 0 0 2px var(--color-ivory-50),
+      inset 0 0 0 3px rgb(67 32 26 / 0.35);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background-color: var(--color-ivory-300);
+    box-shadow:
+      inset 0 0 0 2px var(--color-ivory-300),
+      inset 0 0 0 3px rgb(67 32 26 / 0.45);
+  }
+  /* A text-like button for minor actions (delete, close). */
+  .btn-quiet {
+    border-color: transparent;
+    background: transparent;
+    color: var(--color-burgundy-700);
+    padding-inline: 0.35rem;
+  }
+  .btn-quiet:hover:not(:disabled) {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .btn-sm {
+    padding: 0.3rem 0.75rem;
+    font-size: 0.9rem;
+  }
+
+  /* --- Tabs --------------------------------------------------------------------
+     The current tab is marked with aria-current="page". */
+  .tab {
+    padding: 0.55rem 1.1rem;
+    border: 1px solid var(--color-mahogany-800);
+    background-color: var(--color-ivory-100);
+    color: var(--color-mahogany-800);
+    font-size: 1.05rem;
+    letter-spacing: 0.03em;
+    box-shadow:
+      inset 0 0 0 2px var(--color-ivory-100),
+      inset 0 0 0 3px rgb(67 32 26 / 0.3);
+    cursor: pointer;
+    transition: background-color 120ms ease;
+  }
+  /* Hover only lightens tabs that aren't selected; the selected one stays burgundy. */
+  .tab:not([aria-current="page"], [aria-pressed="true"], :disabled):hover {
+    background-color: var(--color-ivory-300);
+    box-shadow:
+      inset 0 0 0 2px var(--color-ivory-300),
+      inset 0 0 0 3px rgb(67 32 26 / 0.3);
+  }
+  .tab[aria-current="page"],
+  .tab[aria-pressed="true"] {
+    background-color: var(--color-burgundy-600);
+    color: var(--color-ivory-50);
+    box-shadow:
+      inset 0 0 0 2px var(--color-burgundy-600),
+      inset 0 0 0 3px rgb(251 247 236 / 0.5);
+  }
+  .tab:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* --- Form fields ------------------------------------------------------------- */
+  .field {
+    padding: 0.45rem 0.7rem;
+    border: 1px solid rgb(67 32 26 / 0.45);
+    background-color: rgb(251 247 236 / 0.92);
+    color: var(--color-mahogany-900);
+  }
+  .field::placeholder {
+    color: rgb(125 58 44 / 0.7);
+  }
+  .field:focus {
+    outline: none;
+    border-color: var(--color-burgundy-600);
+    box-shadow: 0 0 0 2px rgb(122 31 46 / 0.2);
+  }
+  .field::file-selector-button {
+    margin-right: 0.75rem;
+    padding: 0.3rem 0.85rem;
+    border: 1px solid var(--color-mahogany-800);
+    background: var(--color-ivory-300);
+    color: var(--color-mahogany-800);
+    cursor: pointer;
+  }
+
+  /* --- Small marks -------------------------------------------------------------- */
+  /* A filled label, like a wax seal: MODEL / TOOL in the trace, quantities. */
+  .seal {
+    display: inline-block;
+    padding: 0.05rem 0.45rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-ivory-50);
+    background-color: var(--color-burgundy-600);
+  }
+  .seal-chestnut {
+    background-color: var(--color-chestnut-500);
+  }
+  .seal-ink {
+    background-color: var(--color-mahogany-800);
+  }
+  /* An outlined label: how a search matched (meaning / keywords). */
+  .tag {
+    display: inline-block;
+    padding: 0.05rem 0.4rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    border: 1px solid var(--color-chestnut-400);
+    color: var(--color-chestnut-600);
+    background-color: var(--color-ivory-50);
+  }
+
+  /* A note in the margin: info by default, notice-error for failures. */
+  .notice {
+    padding: 0.6rem 0.9rem;
+    border-left: 3px solid var(--color-chestnut-500);
+    background-color: rgb(251 247 236 / 0.85);
+    color: var(--color-mahogany-700);
+  }
+  .notice-error {
+    border-left-color: var(--color-burgundy-600);
+    color: var(--color-burgundy-700);
+  }
+
+  /* A progress bar. */
+  .meter {
+    height: 0.6rem;
+    border: 1px solid var(--color-mahogany-700);
+    background-color: var(--color-ivory-100);
+  }
+  .meter > span {
+    display: block;
+    height: 100%;
+    background-color: var(--color-burgundy-600);
+    transition: width 300ms ease;
+  }
+
+  /* A block of raw data (the agent trace). */
+  .inset {
+    border: 1px solid rgb(67 32 26 / 0.25);
+    background-color: rgb(251 247 236 / 0.9);
+    color: var(--color-mahogany-800);
+    font-family: var(--font-mono);
+  }
+
+  /* --- Cards -------------------------------------------------------------------- */
+  /* A card image: rounded like a real card, with a thin edge and a soft shadow. */
+  .card-img {
+    border-radius: 4.75% / 3.4%;
+    box-shadow:
+      0 0 0 1px rgb(36 16 11 / 0.35),
+      0 2px 4px rgb(36 16 11 / 0.25);
+  }
+
+  /* Hovered cards "pop": a quick zoom above their neighbours. The large preview
+     (hooks/useCardPreview.tsx) opens one second after this finishes; keep the 150ms
+     duration in sync with POP_MS there. */
+  .card-pop {
+    position: relative;
+    transition: transform 150ms ease-out;
+  }
+  .card-pop:hover {
+    transform: scale(1.06);
+    z-index: 20;
+  }
+
+  /* A brief burgundy glow when a card is added to the deck (SynergyWindow). */
+  .added-glow {
+    animation: seal-glow 0.7s ease-in-out;
+  }
+}
+
+@keyframes seal-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(122 31 46 / 0);
+  }
+  40% {
+    box-shadow:
+      0 0 0 3px rgb(122 31 46 / 0.55),
+      0 0 18px 4px rgb(122 31 46 / 0.35);
+  }
+}

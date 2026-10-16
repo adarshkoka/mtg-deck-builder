@@ -1,5 +1,5 @@
-import type { CustomDeck, ValidationError, DeckValidation } from '../types/customDeck';
-import type { ScryfallCard } from '../types/scryfall';
+import type { CustomDeck, ValidationError, DeckValidation } from '../types/deck';
+import type { ScryfallCard } from '../types/deck';
 
 export class CommanderRulesService {
   // Validate a complete custom deck
@@ -7,26 +7,17 @@ export class CommanderRulesService {
     const errors: ValidationError[] = [];
     const warnings: ValidationError[] = [];
 
-    // Calculate total card count (excluding commander)
-    const cardCount = deck.cards.reduce((total, deckCard) => {
-      return deckCard.isCommander ? total : total + deckCard.quantity;
-    }, 0);
+    // Total card count INCLUDING the commander: a Commander deck is 99 cards + 1 commander.
+    const cardCount = deck.cards.reduce((total, deckCard) => total + deckCard.quantity, 0);
 
-    // Rule 1: Deck size must be exactly 100 cards (excluding commander)
+    // Rule 1: Deck size must be exactly 100 cards (the commander counts)
     if (cardCount !== 100) {
-      if (cardCount < 100) {
-        errors.push({
-          type: 'deck-size',
-          message: `Deck must have exactly 100 cards. Currently has ${cardCount} cards (${100 - cardCount} short).`,
-          severity: 'error'
-        });
-      } else {
-        errors.push({
-          type: 'deck-size',
-          message: `Deck must have exactly 100 cards. Currently has ${cardCount} cards (${cardCount - 100} over).`,
-          severity: 'error'
-        });
-      }
+      const diff = Math.abs(100 - cardCount);
+      errors.push({
+        type: 'deck-size',
+        message: `Deck must have exactly 100 cards including the commander. Currently has ${cardCount} (${diff} ${cardCount < 100 ? 'short' : 'over'}).`,
+        severity: 'error'
+      });
     }
 
     // Rule 2: Must have exactly one commander
@@ -165,15 +156,15 @@ export class CommanderRulesService {
         });
       }
 
-      // Deck size check
-      const currentCount = deck.cards.reduce((total, deckCard) => {
+      // Deck size check: 99 cards plus the commander
+      const nonCommanderCount = deck.cards.reduce((total, deckCard) => {
         return deckCard.isCommander ? total : total + deckCard.quantity;
       }, 0);
 
-      if (currentCount >= 100) {
+      if (nonCommanderCount >= 99) {
         errors.push({
           type: 'deck-size',
-          message: 'Deck already has 100 cards. Remove a card first.',
+          message: 'Deck already has 99 cards plus the commander. Remove a card first.',
           severity: 'error'
         });
       }

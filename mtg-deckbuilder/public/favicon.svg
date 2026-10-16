@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- A burgundy shield with an ivory inner rule and diamond. -->
+  <path d="M32 3 L58 12 V30 C58 46 46 56 32 61 C18 56 6 46 6 30 V12 Z" fill="#7a1f2e" stroke="#36160f" stroke-width="3"/>
+  <path d="M32 9.5 L52 16.5 V30 C52 42 43.5 50 32 54.5 C20.5 50 12 42 12 30 V16.5 Z" fill="none" stroke="#f6eedb" stroke-width="1.6"/>
+  <path d="M32 20 L42 32 L32 44 L22 32 Z" fill="#f6eedb"/>
+  <circle cx="32" cy="32" r="3" fill="#7a1f2e"/>
+</svg>

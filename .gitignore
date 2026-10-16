@@ -22,4 +22,23 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Secrets: real env files stay local; only the .env.example templates are committed
+.env
+.env.*
 *.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Claude Code personal settings
+.claude/settings.local.json
+
+# Card collection exports (personal data)
+*.csv
