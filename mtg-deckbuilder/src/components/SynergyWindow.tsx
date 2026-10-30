@@ -1,199 +1,113 @@
-import React, { useState } from 'react';
-import type { ScryfallCard } from '../types/scryfall';
-import type { GraphSynergyCard } from '../services/graphSynergyService';
-import { useCustomDeck } from '../contexts/CustomDeckContext';
+// "Find synergistic cards": owned cards that fit the commander, from the server's hybrid
+// search (meaning + keywords, no LLM call). Each result says which method matched it.
 
-interface SynergyWindowProps {
-  isOpen: boolean;
+import { useEffect, useState } from 'react';
+import { useCustomDeck } from '../contexts/CustomDeckContext';
+import { api } from '../services/api';
+import { toScryfallCard } from '../services/cardMapper';
+import { useCardPreview } from '../hooks/useCardPreview';
+import type { OwnedCard, SynergyResult } from '../types/backend';
+
+interface Props {
+  collectionId: number;
+  commander: OwnedCard;
   onClose: () => void;
-  synergies: GraphSynergyCard[];
-  loading: boolean;
-  onCardSelect: (card: ScryfallCard) => void;
-  commander?: ScryfallCard;
 }
 
-export const SynergyWindow: React.FC<SynergyWindowProps> = ({
-  isOpen,
-  onClose,
-  synergies,
-  loading,
-  onCardSelect,
-  commander
-}) => {
-  const [expandedExplanations, setExpandedExplanations] = useState<Set<string>>(new Set());
-  const [showFlareEffect, setShowFlareEffect] = useState<string | null>(null);
+export function SynergyWindow({ collectionId, commander, onClose }: Props) {
   const { addCard } = useCustomDeck();
+  const [theme, setTheme] = useState('');
+  const [submittedTheme, setSubmittedTheme] = useState<string | undefined>(undefined);
+  const [result, setResult] = useState<SynergyResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<Record<string, string>>({});
+  const [flare, setFlare] = useState<string | null>(null);
+  const { bind, preview } = useCardPreview();
 
-  // Toggle synergy explanation visibility
-  const toggleExplanation = (cardName: string) => {
-    setExpandedExplanations(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(cardName)) {
-        newSet.delete(cardName);
-      } else {
-        newSet.add(cardName);
-      }
-      return newSet;
-    });
-  };
+  useEffect(() => {
+    setResult(null);
+    api
+      .synergy(collectionId, commander.name, submittedTheme)
+      .then(setResult)
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+  }, [collectionId, commander.name, submittedTheme]);
 
-  const handleAddToCustomDeck = async (card: ScryfallCard, asCommander: boolean = false) => {
-    try {
-      addCard(card, undefined, asCommander);
-      
-      // Show flare effect
-      setShowFlareEffect(card.id);
-      setTimeout(() => setShowFlareEffect(null), 1000);
-    } catch (error) {
-      console.error('Error adding card to deck:', error);
+  const handleAdd = (card: OwnedCard) => {
+    const errors = addCard(toScryfallCard(card));
+    if (errors.length === 0) {
+      setFlare(card.scryfall_id); // a brief burgundy glow (.added-glow in index.css)
+      setTimeout(() => setFlare(null), 700);
     }
+    setFeedback((prev) => ({ ...prev, [card.scryfall_id]: errors.length ? errors[0].message : 'Added' }));
   };
-
-  if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-gray-800 rounded-lg shadow-xl w-11/12 h-5/6 max-w-4xl flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-700">
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl font-bold text-white">Synergistic Cards</h2>
-            {commander && (
-              <span className="text-sm text-gray-400">
-                for {commander.name}
-              </span>
+    <div className="backdrop">
+      <div className="frame sheet flex max-h-[90vh] w-full max-w-5xl flex-col p-0">
+        <div className="flex items-start justify-between gap-4 px-7 pt-6 pb-4">
+          <div className="flex-1">
+            <h2 className="section-title">Cards that Fit {commander.name}</h2>
+            {result && (
+              <p className="mt-1 text-mahogany-500">
+                {result.semantic
+                  ? 'Matched by meaning and keywords'
+                  : 'Keyword matching only (enable smart search on the Collection tab)'}
+              </p>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+          <button className="btn btn-quiet" onClick={onClose}>
+            Close
           </button>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-hidden">
-          {loading ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-400 mx-auto mb-4"></div>
-                <p className="text-gray-400">Finding synergistic cards...</p>
-              </div>
-            </div>
-          ) : synergies.length === 0 ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <p className="text-gray-400 text-lg mb-2">No synergies found</p>
-                <p className="text-gray-500 text-sm">Try selecting different decks or a different commander</p>
-              </div>
-            </div>
-          ) : (
-            <div className="p-4 h-full overflow-y-auto">
-              <div className="mb-4">
-                <p className="text-sm font-medium text-yellow-400 mb-2">
-                  Found {synergies.length} Synergistic Cards
-                </p>
-                <p className="text-xs text-gray-400">
-                  Cards that work well with your commander
-                </p>
-              </div>
+        <form
+          className="flex gap-2 px-7 pb-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setSubmittedTheme(theme.trim() || undefined);
+          }}
+        >
+          <input
+            className="field flex-1"
+            placeholder="Optional extra theme, e.g. 'sacrifice creatures for value'"
+            aria-label="Extra theme"
+            value={theme}
+            onChange={(e) => setTheme(e.target.value)}
+          />
+          <button className="btn btn-primary">Search</button>
+        </form>
 
-              <div className="grid gap-3">
-                {synergies.map((suggestion, index) => (
-                  <div key={`synergy-${index}`} className="bg-gray-700 rounded-lg p-3">
-                    <div className="flex items-center gap-3">
-                      {/* Card image */}
-                      {suggestion.card.image_uris?.normal && (
-                        <button
-                          onClick={() => onCardSelect(suggestion.card)}
-                          className="flex-shrink-0 hover:scale-105 transition-transform"
-                          title="Click to view card"
-                        >
-                          <img
-                            src={suggestion.card.image_uris.normal}
-                            alt={suggestion.card.name}
-                            className="w-12 h-16 object-cover rounded border border-gray-500 hover:border-yellow-400"
-                          />
-                        </button>
-                      )}
-                      
-                      {/* Card info */}
-                      <div className="flex-1">
-                        <button
-                          onClick={() => onCardSelect(suggestion.card)}
-                          className="text-left w-full hover:bg-gray-600 rounded p-2 transition-colors"
-                        >
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="text-sm font-medium text-white">
-                              {suggestion.card.name}
-                            </p>
-                            <span className="text-xs bg-gray-800 text-yellow-300 px-2 py-1 rounded">
-                              Score: {suggestion.synergyScore}
-                            </span>
-                            {suggestion.level === 2 && (
-                              <span className="text-xs bg-purple-700 text-white px-2 py-1 rounded">
-                                Level 2
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-gray-400 mb-1">
-                            From: {suggestion.sourceDeck}
-                          </p>
-                          {suggestion.chainedThrough && (
-                            <p className="text-xs text-purple-300">
-                              → Works with: {suggestion.chainedThrough}
-                            </p>
-                          )}
-                        </button>
-                        
-                        {/* Conditional synergy explanation */}
-                        {expandedExplanations.has(suggestion.card.name) && (
-                          <div className="mt-2 p-2 bg-gray-800 rounded">
-                            <p className="text-xs text-yellow-300">
-                              {suggestion.synergyReasons.join(', ')}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Explanation toggle button */}
-                      <button
-                        onClick={() => toggleExplanation(suggestion.card.name)}
-                        className="flex-shrink-0 w-6 h-6 bg-gray-600 hover:bg-gray-500 rounded text-xs text-white 
-                                 flex items-center justify-center transition-colors"
-                        title={expandedExplanations.has(suggestion.card.name) ? "Hide explanation" : "Show explanation"}
-                      >
-                        {expandedExplanations.has(suggestion.card.name) ? '−' : '?'}
-                      </button>
-                    </div>
-                    
-                    {/* Action buttons */}
-                    <div className="mt-3 flex gap-2">
-                      <button
-                        onClick={() => handleAddToCustomDeck(suggestion.card, false)}
-                        className={`flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 
-                                 text-white rounded text-sm transition-colors duration-200
-                                 ${showFlareEffect?.includes(suggestion.card.id) ? 'animate-pulse' : ''}`}
-                      >
-                        Add to Deck
-                      </button>
-                      <button
-                        onClick={() => handleAddToCustomDeck(suggestion.card, true)}
-                        className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded text-sm transition-colors"
-                      >
-                        As Commander
-                      </button>
-                    </div>
+        <div className="flex-1 overflow-y-auto px-7 pb-7">
+          {error && <p className="notice notice-error">{error}</p>}
+          {!result && !error && <p className="text-mahogany-500">Searching…</p>}
+          {result?.cards.length === 0 && <p className="text-mahogany-500">No matching cards found.</p>}
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            {result?.cards.map(({ card, matched_by }) => (
+              <div key={card.scryfall_id} className={`panel p-2 ${flare === card.scryfall_id ? 'added-glow' : ''}`}>
+                {card.image_url ? (
+                  <img src={card.image_url} alt={card.name} className="card-img card-pop w-full" loading="lazy" {...bind(card.image_url)} />
+                ) : (
+                  <div className="aspect-[5/7] p-2">{card.name}</div>
+                )}
+                <div className="mt-2 space-y-2">
+                  <div className="flex gap-1">
+                    {matched_by.map((m) => (
+                      <span key={m} className="tag">
+                        {m}
+                      </span>
+                    ))}
                   </div>
-                ))}
+                  <button className="btn btn-primary btn-sm w-full" onClick={() => handleAdd(card)}>
+                    Add to Deck
+                  </button>
+                  {feedback[card.scryfall_id] && <p className="text-sm text-mahogany-600">{feedback[card.scryfall_id]}</p>}
+                </div>
               </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       </div>
+      {preview}
     </div>
   );
-};
+}

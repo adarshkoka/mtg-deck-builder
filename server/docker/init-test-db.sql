@@ -1,0 +1,1 @@
+CREATE DATABASE mtg_test;

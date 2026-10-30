@@ -1,0 +1,57 @@
+# Local stack: Postgres + Redis + API + background worker + web app.
+#   docker compose up --build          (everything)
+#   docker compose up db redis         (just the services; run the API with uv)
+services:
+  db:
+    # Postgres 18 with the pgvector extension available (for card embeddings later).
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_USER: mtg
+      POSTGRES_PASSWORD: mtg
+      POSTGRES_DB: mtg
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./server/docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mtg"]
+      interval: 2s
+      retries: 15
+
+  redis:
+    image: redis:8-alpine
+    ports: ["6379:6379"]
+
+  api:
+    build: ./server
+    env_file: ./server/.env
+    environment: &backend-env
+      DATABASE_URL: postgresql+asyncpg://mtg:mtg@db:5432/mtg
+      REDIS_URL: redis://redis:6379/0
+      TASK_RUNNER: celery
+    ports: ["8080:8080"]
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_started }
+
+  worker:
+    build: ./server
+    command: ["celery", "-A", "app.worker", "worker", "--loglevel=info", "--concurrency=1"]
+    env_file: ./server/.env
+    environment: *backend-env
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_started }
+
+  web:
+    build:
+      context: ./mtg-deckbuilder
+      args:
+        VITE_API_URL: http://localhost:8080
+        # Read from the shell or a root .env file: API_KEY=... docker compose up --build
+        VITE_API_KEY: ${API_KEY:-}
+    ports: ["3000:80"]
+    depends_on: [api]
+
+volumes:
+  pgdata:

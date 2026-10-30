@@ -1,0 +1,61 @@
+[project]
+name = "mtg-deck-builder-server"
+version = "0.2.0"
+description = "FastAPI backend for the MTG Commander deck builder"
+requires-python = ">=3.14"
+dependencies = [
+    "asyncpg>=0.32.0",
+    "celery[redis]>=5.6.3",
+    "fastapi>=0.143.0",
+    "google-genai>=2.30.1",
+    "httpx>=0.28.1",
+    "langgraph>=1.2.15",
+    "mcp>=2.3.0",
+    "opentelemetry-api>=1.45.1",
+    "opentelemetry-exporter-otlp-proto-http>=1.45.1",
+    "opentelemetry-sdk>=1.45.1",
+    "pgvector>=0.5.1",
+    "pydantic>=2.14.1",
+    "pydantic-ai-slim[anthropic,google]>=2.56.0",
+    "pydantic-settings>=2.15.0",
+    "python-multipart>=0.0.32",
+    "sqlalchemy[asyncio]>=2.1.4",
+    "tzdata>=2026.5",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.414",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.17.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+# E/F: errors, I: import order, UP: modern syntax, B: bug patterns,
+# ASYNC: blocking calls in async code, ANN: type hints required, RUF: ruff extras.
+select = ["E", "F", "I", "UP", "B", "ASYNC", "SIM", "ANN", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN", "E501"]
+"evals/**" = ["ANN", "E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "evals"]
+# Live evals call the real Gemini API; they only run when asked for: pytest evals -m live
+addopts = "-m 'not live'"
+markers = ["live: calls the real Gemini API and spends quota (opt in with -m live)"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.pyright]
+include = ["app", "tests", "evals"]
+pythonVersion = "3.14"
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
